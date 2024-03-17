@@ -1,5 +1,11 @@
 Changelog
 
+v0.16
+*MAJOR UPDATE ALERT*
+This update fixes the serial incrementation problem. No longer will
+the current serial number be incremented by a single digit. Instead,
+proper YYYYMMDD{00-99} incrementation has been implemented. 
+
 v0.15 
 Update history moved from script to changelog.
 Updates include error handling for log file creation and permissions.
@@ -15,11 +21,3 @@ name directory as the main script and also includes error handling for
 the config file not being present. 
 
 
-########################### A NOTE ON SERIAL GENERATION #################################
-## In the Worldspice implementation of Bind, the serial number for all records should  ##
-## be in YYYYMMDD## format with the last two digits ranging from 00 to 99 incremented  ##
-## by 1 each time the zone file is updated. However for the sake of getting this       ## 
-## fail-over monitor up and running, the easiest way to handle the ever increasing     ##
-## serial number is just to take the existing serial and increment it by 1.            ##
-## Proper serial incrementation will be added in a later version.                      ##
-#########################################################################################
