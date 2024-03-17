@@ -80,16 +80,48 @@ update_dns() {
     local ip=$1
     sed -i "/$SUBDOMAIN/c\\$SUBDOMAIN IN A $1" $ZONE_FILE
 
-# Get the current serial number
-    SERIAL_O=$(grep "serial" $ZONE_FILE | awk '{print $1}')
+    # Start serial incrementation
+    # Get today's date in YYYYMMDD format
+    TODAY=$(date +%Y%m%d)
+    
+    # Extract the current serial number from the zone file
+    currentSerial=$(grep "serial" $ZONE_FILE | awk '{print $1}')
+    
+    if [[ -z $currentSerial ]]; then
+        echo "No serial number found in the zone file."
+        return 1
+    fi
 
-# Increment the serial number
-    SERIAL_N=$(($SERIAL_O + 1))
+    # Extract the date part and the increment part of the serial number
+    currentDate=${currentSerial:0:8}
+    currentIncrement=${currentSerial:8:2}
 
-# Update the serial number
-     sed -i "s/$SERIAL_O/$SERIAL_N/g" $ZONE_FILE
-     log "Serial updated for $SUBDOMAIN.$DOMAIN: $SERIAL_N, $DOMAIN has been reloaded."
+    if [[ $TODAY -eq $currentDate ]]; then
+        # If today's date matches the current date in the serial, increment the last two digits
+        newIncrement=$(printf "%02d" $((10#$currentIncrement + 1)))
+        newSerial="$TODAY$newIncrement"
+    else
+        # If today's date does not match, start a new serial with today's date and "00"
+        newSerial="${TODAY}00"
+    fi
+
+    # Ensure the new serial number is greater than the old one
+    if [[ $newSerial -lt $currentSerial ]]; then
+        echo "New serial number must be greater than the current serial number."
+        return 1
+    fi
+
+    # Finish serial incrementation
+    
+    # Update the serial number
+    sed -i "s/$currentSerial/$newSerial/g" $ZONE_FILE
+    
+    # reload domain
     rndc reload
+    
+    # Log update
+    log "Serial updated for $SUBDOMAIN.$DOMAIN: $newSerial, $DOMAIN has been reloaded."
+    
 }
 
 # Function to send email
