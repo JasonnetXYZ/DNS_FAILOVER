@@ -2,7 +2,7 @@
 
 ########################################################################################
 ########################################################################################
-##########               DNS Monitor and IP Failover version 0.15             ##########
+##########               DNS Monitor and IP Failover version 0.16             ##########
 ##########                  Jason Rhoades (c) 2024 MIT License                ##########
 ####                                                                                ####
 ####  Script must be used together with config file in $subdomain_config.sh format. ####
