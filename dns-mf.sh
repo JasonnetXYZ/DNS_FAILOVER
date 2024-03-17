@@ -12,7 +12,7 @@
 ##########                                                                    ##########
 ##########         For more information, visit the wiki page below.           ##########
 ##########                                                                    ##########
-##########  https://wiki.worldspice.net/index.php/DNS_Monitoring_and_failover ##########
+##########  https://wiki.worldspice.net/index.php/DNS_Monitoring_and_Failover ##########
 ##########                                                                    ##########
 ########################################################################################
 ########################################################################################                                                              
