@@ -2,7 +2,7 @@
 
 ########################################################################################
 ########################################################################################
-##########               DNS Monitor and IP Failover version 0.17.3           ##########
+##########               DNS Monitor and IP Failover version 0.16             ##########
 ##########                  Jason Rhoades (c) 2024 MIT License                ##########
 ####                                                                                ####
 ####  Script must be used together with config file in $subdomain_config.sh format. ####
@@ -16,11 +16,6 @@
 ##########                                                                    ##########
 ########################################################################################
 ########################################################################################                                                              
-
-#set -x
-#set -v
-#set -u
-#trap read debug
 
 # Begin Script
 
@@ -41,14 +36,9 @@ fi
 
 source "$CONFIG_FILE"
 
-# Determine if handling a root domain or subdomain
-# Extracts the base name and removes the _config.sh suffix
-CONFIG_BASENAME=$(basename "$CONFIG_FILE" ".sh")
-if [[ "$CONFIG_BASENAME" == "root" ]]; then
-    SUBDOMAIN="@"
-else
-    SUBDOMAIN=${CONFIG_BASENAME%_config}
-fi
+# Extract subdomain from the configuration file name
+# This extracts the base name and then removes the _config.sh suffix
+SUBDOMAIN=$(basename "$CONFIG_FILE" "_config.sh")
 
 LOG_PATH="/var/log/dns_mon/$DOMAIN"
 
@@ -59,13 +49,6 @@ if [[ ! -d "$LOG_PATH" ]]; then
         echo "Failed to create log directory. Check permissions."
         exit 1
     fi
-fi
-
-# Adjust log file name for root domain
-if [[ "$SUBDOMAIN" == "@" ]]; then
-    LOG_FILE="$LOG_PATH/root_domain.log"
-else
-    LOG_FILE="$LOG_PATH/$SUBDOMAIN.log"
 fi
 
 # Check if the log file is writable
@@ -94,18 +77,9 @@ check_ip() {
 
 # Function to update DNS record
 update_dns() {
-    local ip=$1 
-    if [[ "$SUBDOMAIN" == "root" ]] && [[ $ip == "$PRIMARY_IP" ]]; then
-        # Logic to update root domain record
-        sed -i "0,/$ip/{s/$SECONDARY_IP/$ip/}" $ZONE_FILE
+    local ip=$1
+    sed -i "/$SUBDOMAIN/c\\$SUBDOMAIN IN A $1" $ZONE_FILE
 
-    elif [[ "$SUBDOMAIN" == "root" ]] && [[ $ip == "$SECONDARY_IP" ]]; then
-        sed -i "0,/$PRIMARY_IP/{s/$PRIMARY_IP/$ip/}" $ZONE_FILE
-    else
-        # Logic for subdomains remains the same
-        sed -i "/$SUBDOMAIN/c\\$SUBDOMAIN IN A $ip" $ZONE_FILE
-    fi
-   
     # Start serial incrementation
     # Get today's date in YYYYMMDD format
     TODAY=$(date +%Y%m%d)
@@ -156,27 +130,19 @@ send_email() {
 }
 
 # Initial DNS check with dig
-if [[ "$SUBDOMAIN" == "@" ]]; then
-    CURRENT_IP=$(dig +short $DOMAIN @$DNS_SERVER)
-else
-    CURRENT_IP=$(dig +short $SUBDOMAIN.$DOMAIN @$DNS_SERVER)
-fi
+CURRENT_IP=$(dig +short $SUBDOMAIN.$DOMAIN @$DNS_SERVER)
 
-# Update DNS if the subdomain is not set to the primary IP and is not the root domain
-if [[ "$SUBDOMAIN" != "@" ]] && [ "$CURRENT_IP" != "$PRIMARY_IP" ]; then
+# Update DNS if the subdomain is not set to the primary IP
+if [ "$CURRENT_IP" != "$PRIMARY_IP" ]; then
     update_dns $PRIMARY_IP
     CURRENT_IP="$PRIMARY_IP" # Update the current IP to reflect the change
     log "Starting Monitor:"
-    log "Changing to $PRIMARY_IP"
-    log "$EMAIL_TO and $EMAIL_CC will receive all alerts"
+    log "IP for $SUBDOMAIN.$DOMAIN is not set to primary IP. Changing to $PRIMARY_UP"
+    log "$EMAIL_TO and $EMAIL_CC will recieve all alerts"
 else
     log "Starting Monitor:"
-    if [[ "$SUBDOMAIN" == "root" ]]; then
-        log "Root domain update is skipped. Monitoring started."
-    else
-        log "$SUBDOMAIN.$DOMAIN is already set to primary IP: $PRIMARY_IP"
-    fi
-    log "$EMAIL_TO and $EMAIL_CC will receive all alerts"
+    log "$SUBDOMAIN.$DOMAIN is already set to primary IP: $PRIMARY_IP"
+    log "$EMAIL_TO and $EMAIL_CC will recieve all alerts"
 fi
 
 
@@ -198,8 +164,8 @@ while true; do
     else
         if [[ $PRIMARY_DOWN_TIME -ge $DOWNTIME_THRESHOLD ]] && [[ $ALERT_PRIMARY_DOWN_SENT -eq 1 ]]; then
             update_dns $PRIMARY_IP
-            send_email "IP Recovery Alert for $SUBDOMAIN.$DOMAIN" "Primary IP $PRIMARY_IP is back up for $SUBDOMAIN.$DOMAIN. Switched back to primary IP."
-            log "$PRIMARY_IP is now the IP for $SUBDOMAIN.$DOMAIN."
+            send_email "IP Recovery Alert" "Primary IP $PRIMARY_IP is back up for $SUBDOMAIN.$DOMAIN. Switched back to primary IP."
+            log "$SECONDARY_IP is down. $PRIMARY_IP is now the IP for $SUBDOMAIN.$DOMAIN."
             ALERT_PRIMARY_DOWN_SENT=0 # Reset alert sent flag
         fi
         PRIMARY_DOWN_TIME=0
@@ -214,13 +180,13 @@ while true; do
     # Decision making based on IP status and timers
     if [[ $PRIMARY_DOWN_TIME -ge $DOWNTIME_THRESHOLD ]] && [[ $SECONDARY_STATUS -eq 0 ]] && [[ $ALERT_PRIMARY_DOWN_SENT -eq 0 ]]; then
         update_dns $SECONDARY_IP
-        send_email "IP Update Alert for $SUBDOMAIN.$DOMAIN" "Primary IP $PRIMARY_IP is down for $SUBDOMAIN. Switched to secondary IP $SECONDARY_IP."
-        log "$SECONDARY_IP is now the IP for $SUBDOMAIN.$DOMAIN."
+        send_email "IP Update Alert" "Primary IP $PRIMARY_IP is down for $SUBDOMAIN. Switched to secondary IP $SECONDARY_IP."
+        log "$PRIMARY_IP is down. $SECONDARY_IP is now the IP for $SUBDOMAIN.$DOMAIN."
         ALERT_PRIMARY_DOWN_SENT=1 # Mark that the alert has been sent
     fi
 
     if [[ $PRIMARY_STATUS -ne 0 ]] && [[ $SECONDARY_STATUS -ne 0 ]] && [[ $ALERT_BOTH_DOWN_SENT -eq 0 ]]; then
-        send_email "Network Alert FOR $SUBDOMAIN.$DOMAIN" "Both IPs are down."
+        send_email "Network Alert FOR $SUBDOMAIN" "Both IPs are down."
         log "Both IPs are now down for $SUBDOMAIN.$DOMAIN. Waiting for connectivity."
         ALERT_BOTH_DOWN_SENT=1 # Mark that the alert has been sent
     elif [[ $PRIMARY_STATUS -eq 0 ]] || [[ $SECONDARY_STATUS -eq 0 ]]; then
