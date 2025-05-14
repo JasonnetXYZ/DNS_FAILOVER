@@ -2,7 +2,7 @@
 
 ########################################################################################
 ########################################################################################
-##########               DNS Monitor and IP Failover version 0.17.3           ##########
+##########               DNS Monitor and IP Failover version 0.17.5           ##########
 ##########                  Jason Rhoades (c) 2024 MIT License                ##########
 ####                                                                                ####
 ####  Script must be used together with config file in $subdomain_config.sh format. ####
@@ -17,14 +17,16 @@
 ########################################################################################
 ########################################################################################                                                              
 
+#exec 1> dasmbt_live_output 2>&1
+
 #set -x
 #set -v
 #set -u
-#trap read debug
+#trap ' >> dasmbt_live_output' read debug
 
 # Begin Script
 
-# Load configuration
+# Load configuration file
 if [ $# -eq 0 ]; then
     echo "Usage: $0 <path_to_config_file>"
     exit 1
@@ -41,7 +43,7 @@ fi
 
 source "$CONFIG_FILE"
 
-# Determine if handling a root domain or subdomain
+# Determine if we are handling a root domain or a subdomain
 # Extracts the base name and removes the _config.sh suffix
 CONFIG_BASENAME=$(basename "$CONFIG_FILE" ".sh")
 if [[ "$CONFIG_BASENAME" == "root" ]]; then
@@ -50,13 +52,14 @@ else
     SUBDOMAIN=${CONFIG_BASENAME%_config}
 fi
 
+# Set log file name and path
 LOG_PATH="/var/log/dns_mon/$DOMAIN"
 
 # Ensure the log path exists
 if [[ ! -d "$LOG_PATH" ]]; then
     mkdir -p "$LOG_PATH"
     if [[ $? -ne 0 ]]; then
-        echo "Failed to create log directory. Check permissions."
+        log "Failed to create log directory. Check permissions."
         exit 1
     fi
 fi
@@ -88,7 +91,7 @@ ALERT_BOTH_DOWN_SENT=0
 
 # Function to check IP availability
 check_ip() {
-    ping -c 1 $1 > /dev/null 2>&1
+    ping -c 6 $1 > /dev/null 2>&1
     return $?
 }
 
@@ -114,7 +117,7 @@ update_dns() {
     currentSerial=$(grep "serial" $ZONE_FILE | awk '{print $1}')
     
     if [[ -z $currentSerial ]]; then
-        echo "No serial number found in the zone file."
+        log "No serial number found in the zone file."
         return 1
     fi
 
@@ -133,7 +136,7 @@ update_dns() {
 
     # Ensure the new serial number is greater than the old one
     if [[ $newSerial -lt $currentSerial ]]; then
-        echo "New serial number must be greater than the current serial number."
+        log "New serial number must be greater than the current serial number."
         return 1
     fi
 
@@ -214,7 +217,7 @@ while true; do
     # Decision making based on IP status and timers
     if [[ $PRIMARY_DOWN_TIME -ge $DOWNTIME_THRESHOLD ]] && [[ $SECONDARY_STATUS -eq 0 ]] && [[ $ALERT_PRIMARY_DOWN_SENT -eq 0 ]]; then
         update_dns $SECONDARY_IP
-        send_email "IP Update Alert for $SUBDOMAIN.$DOMAIN" "Primary IP $PRIMARY_IP is down for $SUBDOMAIN. Switched to secondary IP $SECONDARY_IP."
+        send_email "IP Update Alert for $SUBDOMAIN.$DOMAIN" "Primary IP $PRIMARY_IP is down for $SUBDOMAIN.$DOMAIN. Switched to secondary IP $SECONDARY_IP."
         log "$SECONDARY_IP is now the IP for $SUBDOMAIN.$DOMAIN."
         ALERT_PRIMARY_DOWN_SENT=1 # Mark that the alert has been sent
     fi
@@ -229,5 +232,3 @@ while true; do
 
     sleep $CHECK_INTERVAL
 done
-
-
